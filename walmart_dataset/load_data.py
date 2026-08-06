@@ -1,10 +1,9 @@
-import psycopg2
-import os
+from pathlib import Path
 
-# Database connection string
+import psycopg2
+
 conn_string = "your_connection_string_here"
 
-# CSV files mapping to tables
 csv_files = {
     "customers.csv": "raw.customers",
     "stores.csv": "raw.stores",
@@ -14,34 +13,36 @@ csv_files = {
     "order_items.csv": "raw.order_items",
 }
 
-data_dir = "data"
+data_dir = Path(__file__).resolve().parent / "data"
+conn = None
 
 try:
-    # Connect to the database
     conn = psycopg2.connect(conn_string)
-    cursor = conn.cursor()
-    
-    # Load each CSV file into its corresponding table
-    for csv_file, table_name in csv_files.items():
-        csv_path = os.path.join(data_dir, csv_file)
-        
-        if os.path.exists(csv_path):
-            print(f"Loading {csv_file} into {table_name}...")
-            
-            with open(csv_path, 'r') as f:
-                cursor.copy_expert(f"COPY {table_name} FROM STDIN WITH (FORMAT CSV, HEADER TRUE)", f)
-            
-            conn.commit()
-            print(f"✓ Successfully loaded {csv_file}")
-        else:
-            print(f"✗ File not found: {csv_path}")
-    
-    cursor.close()
-    conn.close()
+
+    with conn.cursor() as cursor:
+        for csv_file, table_name in csv_files.items():
+            csv_path = data_dir / csv_file
+
+            if csv_path.exists():
+                print(f"Loading {csv_file} into {table_name}...")
+
+                with csv_path.open("r", encoding="utf-8") as f:
+                    cursor.copy_expert(
+                        f"COPY {table_name} FROM STDIN WITH (FORMAT CSV, HEADER TRUE)",
+                        f,
+                    )
+
+                conn.commit()
+                print(f"✓ Successfully loaded {csv_file}")
+            else:
+                print(f"✗ File not found: {csv_path}")
+
     print("\n✓ All data loaded successfully!")
-    
+
 except Exception as e:
     print(f"Error: {e}")
-    if conn:
+    if conn is not None:
         conn.rollback()
+finally:
+    if conn is not None:
         conn.close()
